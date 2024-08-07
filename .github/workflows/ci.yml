@@ -44,12 +44,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run unit tests
+      - name: Create a simple test file
         run: |
           mkdir -p tests
-          echo "import unittest\n\nclass TestPlaceholder(unittest.TestCase):\n    def test_placeholder(self):\n        self.assertEqual(1, 1)\n\nif __name__ == '__main__':\n    unittest.main()" > tests/test_placeholder.py
+          echo "def test_placeholder():\n    assert 1 == 1" > tests/test_placeholder.py
           cat tests/test_placeholder.py
-          python -m unittest discover -s tests
+
+      - name: Run unit tests
+        run: |
+          pytest tests
 
       - name: Build, tag, and push MySQL image to Amazon ECR
         if: success()
