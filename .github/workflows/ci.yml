@@ -34,18 +34,6 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build, tag, and push image to Amazon ECR
-        env:
-          ECR_REGISTRY: 104387388648.dkr.ecr.us-east-1.amazonaws.com
-          ECR_REPOSITORY: my-app
-          IMAGE_TAG: latest
-        run: |
-          # Build the Docker image
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-
-          # Push the Docker image to ECR
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -60,7 +48,42 @@ jobs:
         run: |
           python -m unittest discover -s tests
 
-      - name: Publish to ECR only if tests pass
+      - name: Build, tag, and push MySQL image to Amazon ECR
+        if: success()
+        env:
+          ECR_REGISTRY: 104387388648.dkr.ecr.us-east-1.amazonaws.com
+          MYSQL_REPOSITORY: mysql-repo
+          MYSQL_IMAGE_TAG: latest
+        run: |
+          docker build -t $ECR_REGISTRY/$MYSQL_REPOSITORY:$MYSQL_IMAGE_TAG -f Dockerfile_mysql .
+          docker push $ECR_REGISTRY/$MYSQL_REPOSITORY:$MYSQL_IMAGE_TAG
+
+      - name: Build, tag, and push Flask image to Amazon ECR
+        if: success()
+        env:
+          ECR_REGISTRY: 104387388648.dkr.ecr.us-east-1.amazonaws.com
+          FLASK_REPOSITORY: my-app
+          FLASK_IMAGE_TAG: latest
+        run: |
+          docker build -t $ECR_REGISTRY/$FLASK_REPOSITORY:$FLASK_IMAGE_TAG .
+          docker push $ECR_REGISTRY/$FLASK_REPOSITORY:$FLASK_IMAGE_TAG
+
+      - name: Run MySQL container
         if: success()
         run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker run -d --name mysql-container -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=employees -e MYSQL_USER=user -e MYSQL_PASSWORD=user_password ${{ env.ECR_REGISTRY }}/${{ env.MYSQL_REPOSITORY }}:${{ env.MYSQL_IMAGE_TAG }}
+
+      - name: Wait for MySQL to be ready
+        if: success()
+        run: |
+          until docker exec mysql-container mysqladmin --user=root --password=root --host "127.0.0.1" ping --silent &> /dev/null ; do
+            echo 'waiting for mysql...'
+            sleep 2
+          done
+
+      - name: Stop MySQL container
+        if: success()
+        run: |
+          docker stop mysql-container
+          docker rm mysql-container
+
